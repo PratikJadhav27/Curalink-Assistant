@@ -39,4 +39,4 @@ app.include_router(research.router)
 async def health():
     return {"status": "ok", "service": "curalink-ai-service"}
 
-# Trigger branch deploy
+# Trigger branch deploy 2

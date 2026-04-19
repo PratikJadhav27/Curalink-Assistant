@@ -1,0 +1,37 @@
+name: Deploy AI Service to Hugging Face
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "ai-service/**" # Only run when files in ai-service change!
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # REPLACE 'YOUR_HF_USERNAME' AND 'SPACE_NAME' BELOW!
+          HF_SPACE_URL: https://username:${HF_TOKEN}@huggingface.co/spaces/Pratik-027/curalink-ai
+        run: |
+          git config --global user.email "bot@github-actions.com"
+          git config --global user.name "GitHub Actions Bot"
+
+          # Clone the empty/running hugging face space into a temporary folder
+          git clone $HF_SPACE_URL hf-space-repo
+
+          # Copy the contents of your ai-service folder into the space repo
+          cp -a ai-service/. hf-space-repo/
+
+          # Push from inside the space repo
+          cd hf-space-repo
+          git add .
+          git commit -m "Automated deploy from GitHub" || echo "No changes to commit"
+          git push origin main

@@ -115,6 +115,7 @@ Be thorough. Be specific. Be human. Never hallucinate citations."""
             messages=messages,
             max_tokens=1800,
             temperature=0.4,
+            response_format={"type": "json_object"},
         )
         raw = response.choices[0].message.content.strip()
         return _parse_json_response(raw)

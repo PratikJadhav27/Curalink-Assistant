@@ -1,8 +1,8 @@
 """
 ClinicalTrials.gov API v2 Retrieval Client
 """
-import httpx
-
+import asyncio
+import requests
 
 CLINICAL_TRIALS_URL = "https://clinicaltrials.gov/api/v2/studies"
 
@@ -35,17 +35,19 @@ async def fetch_clinical_trials(
         params["filter.overallStatus"] = status_filter
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CuralinkBot/1.0",
+        "User-Agent": "curl/7.81.0",
         "Accept": "application/json"
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30, headers=headers) as client:
-            resp = await client.get(CLINICAL_TRIALS_URL, params=params)
+        def _fetch():
+            resp = requests.get(CLINICAL_TRIALS_URL, params=params, headers=headers, timeout=30)
             resp.raise_for_status()
-            data = resp.json()
-            studies = data.get("studies", [])
-            return [_normalize_trial(s) for s in studies]
+            return resp.json()
+
+        data = await asyncio.to_thread(_fetch)
+        studies = data.get("studies", [])
+        return [_normalize_trial(s) for s in studies]
     except Exception as e:
         print(f"[ClinicalTrials] Error: {e}")
         return []

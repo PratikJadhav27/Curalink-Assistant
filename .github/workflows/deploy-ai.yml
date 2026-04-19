@@ -19,7 +19,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           # REPLACE 'YOUR_HF_USERNAME' AND 'SPACE_NAME' BELOW!
-          HF_SPACE_URL: https://username:${HF_TOKEN}@huggingface.co/spaces/Pratik-027/curalink-ai
+          HF_SPACE_URL: https://Pratik-027:${HF_TOKEN}@huggingface.co/spaces/Pratik-027/curalink-ai
         run: |
           git config --global user.email "bot@github-actions.com"
           git config --global user.name "GitHub Actions Bot"

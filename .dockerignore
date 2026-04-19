@@ -1,0 +1,31 @@
+# Ignore everything by default (optional, but we'll use an exclusion list instead)
+# Node
+node_modules
+npm-debug.log
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+venv
+env
+
+# Env files (NEVER copy secrets to images!)
+.env
+.env.*
+!.env.example
+
+# Builds
+dist
+build
+
+# DB Data & Git
+mongo-data
+.git
+.gitignore
+.dockerignore
+
+# OS/IDE
+.DS_Store
+.vscode

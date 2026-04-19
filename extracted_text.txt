@@ -1,0 +1,377 @@
+Curalink — AI Medical Research
+Assistant Hackathon
+🎯 Overview
+Build a full-stack  AI-powered Medical Research Assistant Prorotype using the 
+MERN stack, powered by a custom open-source LLM.
+This system should act as a health research companion that:
+Understands user context → retrieves high-quality medical research →
+reasons over it → delivers structured, personalized, and source-backed
+answers.
+This is not just a chatbot — it is a research + reasoning system.
+💡 Objective
+Design a system that can:
+Accept user medical context (disease, intent, optional location)
+Curalink — AI Medical Research Assistant Hackathon
+1
+
+Fetch relevant research publications and clinical trials
+Deliver structured, high-quality, research-backed answers
+Maintain context across conversations
+Provide deep, personalized insights instead of generic responses
+🧠 Core Expectations
+1️⃣ Structured Input Understanding + Query Expansion
+Your system must handle both structured and natural queries.
+Example Input
+Patient Name: John Smith
+Disease of Interest: Parkinson’s disease
+Additional Query: Deep Brain Stimulation
+Location: Toronto, Canada
+Expected Behavior
+The system should automatically expand the query intelligently.
+👉 Example:
+Instead of searching:
+“deep brain stimulation”
+It should search:
+“deep brain stimulation + Parkinson’s disease”
+Output Should Combine
+Relevant publications
+Relevant clinical trials
+Curalink — AI Medical Research Assistant Hackathon
+2
+
+👉 All results must be context-aware and merged intelligently
+2️⃣ Research Data Retrieval (Mandatory Sources)
+Your system must use:
+OpenAlex API → research publications
+PubMed API → research publications
+ClinicalTrials.gov API → clinical trials
+Publications (OpenAlex + PubMed)
+The system should:
+Fetch relevant publications based on query + disease context
+Ensure depth in retrieval before filtering
+Publications Must Include:
+Title
+Abstract / Summary
+Authors
+Publication Year
+Source (PubMed / OpenAlex)
+URL
+Retrieval Expectation (Important)
+❌ Avoid:
+Fetching only top 1–2 results based on user query
+✅ Expected:
+Retrieve a broad candidate pool (50–300 results)
+Then:
+Curalink — AI Medical Research Assistant Hackathon
+3
+
+Filter
+Rank
+Refine
+Ultimately in final response show only top 6-8 publications or clinical trails
+👉 The system must demonstrate depth first, then precision
+3️⃣ Clinical Trials Integration (Critical Component)
+Source:
+ClinicalTrials.gov API
+What are Clinical Trials?
+Clinical trials are research studies conducted on human participants to
+evaluate the safety and effectiveness of medical treatments, drugs, or
+interventions.
+They represent:
+Real-world validation of treatments
+Emerging therapies
+Future medical advancements
+Expected Output (Clinical Trials)
+The system should fetch:
+Ongoing or completed trials related to the disease and query
+Clinical Trial Data Must Include:
+Title
+Recruiting Status
+Eligibility Criteria
+Curalink — AI Medical Research Assistant Hackathon
+4
+
+Location
+Contact Information
+👉 Results must be:
+Relevant to disease + intent
+Properly filtered and ranked
+4️⃣ Intelligent Retrieval + Re-Ranking
+Your system must:
+Retrieve large sets
+Apply strong filtering and ranking
+Ranking factors should include:
+Relevance to query
+Recency
+Source credibility
+You are free to decide:
+Embeddings vs keyword vs hybrid search
+Vector DB vs direct API processing
+Real-time vs stored data
+👉 But retrieval must be deep, accurate, and intentional
+5️⃣ Custom LLM Reasoning (Strict Requirement)
+You must use a custom or open-source LLM.
+Allowed:
+Local models (e.g., Ollama)
+Hugging Face models
+Curalink — AI Medical Research Assistant Hackathon
+5
+
+Or any way of creating custom llm excluding api call to gemini, openai etc. 
+What the LLM Must Do
+Understand:
+Disease
+User intent
+Context
+Combine:
+Publications
+Clinical trials
+Generate:
+👉 Structured, accurate, non-hallucinated responses
+6️⃣ Context Awareness & Follow-Up Intelligence
+The system must support multi-turn conversations.
+Example
+User:
+“Latest treatment for lung cancer”
+Follow-up:
+“Can I take Vitamin D?”
+Expected Behavior
+Use previous context (lung cancer)
+Re-run retrieval if needed
+Generate a personalized, research-backed response
+👉 No generic answers
+Curalink — AI Medical Research Assistant Hackathon
+6
+
+👉 No stale reuse
+7️⃣ Personalization (Health Companion Behavior)
+The system should act like a user-aware assistant:
+Understand user condition
+Adapt answers accordingly
+Improve relevance over time
+Example
+Instead of:
+“Vitamin D is good”
+It should say:
+“Based on studies in lung cancer patients…”
+8️⃣ Structured Output 
+Each response should include:
+Condition Overview
+Research Insights (from publications)
+Clinical Trials (if applicable)
+Source Attribution
+Source Attribution Must Include:
+Title
+Authors
+Year
+Platform
+URL
+Curalink — AI Medical Research Assistant Hackathon
+7
+
+Supporting snippet
+9️⃣ System Design Freedom (With Justification)
+You are free to decide:
+Real-time vs stored data
+Embeddings vs non-embeddings
+Chunking strategy
+Ranking pipeline
+👉 But you must clearly demonstrate:
+Strong reasoning
+Smart trade-offs
+Scalability thinking
+🔟 End-to-End Application Requirement
+You must build a working MERN stack application:
+MongoDB
+Express
+React
+Node.js
+Application Should:
+Provide chatbot interface
+Accept structured + natural queries
+Display:
+Publications
+Clinical trials
+Curalink — AI Medical Research Assistant Hackathon
+8
+
+Support follow-up questions
+Show structured responses with sources
+⚙️ Model & Infrastructure Flexibility
+You may use:
+Ollama (for local models)
+Hugging Face
+Any open-source stack
+👉 Focus on:
+Control
+Reliability
+Transparency
+💡 Data Sorunces API Format 
+API ENDPOINTS TO FETCH DATA PROPER FORMAT AND DETAILS
+📄 API Query Endpoints (ClinicalTrials +
+PubMed + OpenAlex)
+🧪 ClinicalTrials.gov API v2
+Use structured parameters for more accurate results.
+🔹 Base Endpoint
+https://clinicaltrials.gov/api/v2/studies
+Curalink — AI Medical Research Assistant Hackathon
+9
+
+🔹 Basic Query Template
+https://clinicaltrials.gov/api/v2/studies?query.cond=<DISEASE>&filter.overallStatus=<
+STATUS>&pageSize=<SIZE>&format=json
+🔹 Example (Diabetes)
+https://clinicaltrials.gov/api/v2/studies?query.cond=diabetes&filter.overallStatus=RE
+CRUITING&pageSize=20&format=json
+📚 PubMed (NCBI)
+🔹 Step 1: Search (Get IDs)
+https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=<QUERY>&ret
+max=<SIZE>&sort=pub+date&retmode=json
+🔹 Step 2: Fetch Details
+https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=<ID1,ID2,...>&
+retmode=xml
+🔹 Example (Lung Cancer)
+Step 1: Search
+https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=lung+cancer
++AND+clinical+trial&retmax=3&sort=pub+date&retmode=json
+Example Response (Simplified)
+Curalink — AI Medical Research Assistant Hackathon
+10
+
+{
+  "esearchresult": {
+    "idlist": ["41732954", "41949826", "41915379"]
+  }
+}
+Step 2: Fetch
+https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=41732954,41949
+826,41915379&retmode=xml
+👉 Returns full article data (title, abstract, authors, journal, etc.)
+🌐 OpenAlex
+🔹 Base Endpoint
+https://api.openalex.org/works
+🔹 Basic Template
+https://api.openalex.org/works?search=<QUERY>&per-page=<SIZE>&page=<PAGE>&sort=<SORT>
+🔹 Example (Lung Cancer Research)
+Relevance (default):
+https://api.openalex.org/works?search=lung+cancer+research&per-page=25&page=1&sort=re
+levance_score:desc
+Newest First:
+Curalink — AI Medical Research Assistant Hackathon
+11
+
+https://api.openalex.org/works?search=lung+cancer+research&per-page=25&page=1&sort=pu
+blication_date:desc
+With Date Filter:
+https://api.openalex.org/works?search=lung+cancer+research&per-page=25&page=1&sort=re
+levance_score:desc&filter=from_publication_date:2020-01-01,to_publication_date:2025-1
+2-31
+✅ Key Notes
+search  → free-text query
+per-page  → max 200
+page  → pagination
+filter  → date range
+Response → JSON ( results  + meta )
+This will paste super cleanly into Notion (proper sections + spacing). If you
+want, I can also make a table version (even cleaner for docs).
+🧪 Example Use Cases  (We will add more)
+(You will demo using these)
+“Latest treatment for lung cancer”
+“Clinical trials for diabetes”
+“Top researchers in Alzheimer’s disease”
+“Recent studies on heart disease”
+📤 Submission Instructions
+You must submit:
+Curalink — AI Medical Research Assistant Hackathon
+12
+
+1️⃣ 🌐 Live Deployed Application
+Fully working
+No broken links
+Must be accessible
+2️⃣ 🎥 Loom Video (MANDATORY & CRITICAL)
+Your video must:
+Be detailed showing how your demo application works.
+Clearly explain:
+Architecture
+Pipeline (End-to-End)
+Chunking strategy
+LLM choice
+Show live demo with real queries
+Join the Telegram group for submissions:  
+https://t.me/+j0PttxFKtUUxZjVl
+📝 Points to Note
+1. UI/UX: Ensure a clean, intuitive, and user-friendly design. Keep the overall
+experience smooth and simple.
+2. Code Quality: Follow best practices and maintain a well-structured, scalable
+codebase.
+3. Deployment: You must submit a working deployment link along with a demo
+(Loom) video.
+4. Code Submission: You are not required to submit your code. Selected
+winners will continue development as part of the founding team under expert
+guidance. This challenge focuses on skills, AI leverage, and creativity.
+Curalink — AI Medical Research Assistant Hackathon
+13
+
+5. Use of AI Tools: You are encouraged to use tools like Cursor or similar to
+improve productivity and execution speed  use them smartly.
+6. Discipline: We are strict about discipline and behavior. Participants who
+remain committed, consistent, and respectful throughout the hackathon will
+receive a certificate in recognition of their efforts.
+7. Core Focus: The core of this hackathon is LLMs  how effectively you use
+them, how intelligently you design your pipeline, and the results you
+generate. You are encouraged to explore open-source LLMs (e.g., from
+Hugging Face), but the choice is completely up to you. Be smart and make it
+impactful.
+8. Tech Stack: You are required to build the application using the MERN stack.
+For the LLM/backend side, you are free to use any tools or frameworks,
+provided the system is scalable. Evaluation will primarily focus on the quality
+of results and most important how you have approcahed the entire backend.
+🏁 Evaluation Criteria
+We are evaluating based on:
+🧠 AI pipeline quality
+🔍 Retrieval + ranking accuracy
+⚙️ Engineering depth
+🎯 Usability
+🎥 Demo clarity
+🏆 Prizes & Opportunities
+🥇 Winner
+💼 Full-time Job Offer
+💰 Competitive Base Salary (CTC)
+🏆 Certificate of Securing 1st Postion
+🥈 Runner-up
+Curalink — AI Medical Research Assistant Hackathon
+14
+
+💵 Cash Prize (~$30)
+🎖 Certificate of Securing 2nd Position
+🥉 Third Place
+💵 Cash Prize (~$15)
+🎖 Certificate of Securing 3rd Position
+✨ Additional participants:
+🎓 Certificate based on the quality of effort and level of submission
+🤝 Opportunity to connect with team
+🌟 Closing Note
+This hackathon is more than a challenge it’s a chance to shape your future while
+working on one of the most advanced projects out there.
+It’s a test for your dedication and obsession towards your role not just how much
+you know, but how much you’re willing to figure out.
+It’s a test of skills over resumes in the era of AI, you’re completely free to use
+any AI tool to do this assignment. What matters is how smartly you use it and how
+much ownership you show.
+We want to work with people who enjoy challenges, the ones who keep pushing
+even when things break, and don’t stop until it finally works.
+Once you’re onboard, you’ll be working with a team of geniuses and on some
+seriously exciting stuff. But before that, you’ve got to prove you’re the right fit for
+this role.
+So yeah thank you for being here, and all the very best for this Hackathon!!
+We’re looking forward to connecting/working with the person who can ultimately
+get recognized as an winner of this challenge.
+Also, to those who stay till the end and give it their best shot but ultimately don’t
+end up winning, we’ll be giving a Certificate of Appreciation for their hard work,
+consistency, determination, and dedication. Cheers and ALL THE BEST!!! 😉🔥.
+Curalink — AI Medical Research Assistant Hackathon
+15
+
+Curalink — AI Medical Research Assistant Hackathon
+16

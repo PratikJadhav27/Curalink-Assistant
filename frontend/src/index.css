@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    @apply bg-surface text-gray-100 font-sans antialiased;
+    background: #0a0a14;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #0f0f1a; }
+  ::-webkit-scrollbar-thumb { @apply bg-brand-700 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-brand-500; }
+}
+
+@layer components {
+  /* Glass card */
+  .glass {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .glass-hover {
+    @apply glass transition-all duration-200;
+  }
+  .glass-hover:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+
+  /* Button primary */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm
+           bg-gradient-to-r from-brand-600 to-brand-500 text-white
+           hover:from-brand-500 hover:to-brand-400
+           active:scale-95 transition-all duration-200 shadow-lg;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm
+           text-gray-400 hover:text-white hover:bg-white/5
+           active:scale-95 transition-all duration-200;
+  }
+
+  /* Input */
+  .input-field {
+    @apply w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white
+           placeholder-gray-500 focus:outline-none focus:border-brand-500
+           transition-all duration-200 text-sm;
+  }
+
+  /* Tag badge */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium;
+  }
+
+  .badge-green  {
+    @apply badge;
+    background: rgba(16, 185, 129, 0.15);
+    color: rgb(52, 211, 153);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+  }
+  .badge-blue   {
+    @apply badge;
+    background: rgba(59, 130, 246, 0.15);
+    color: rgb(96, 165, 250);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+  }
+  .badge-purple {
+    @apply badge;
+    background: rgba(99, 102, 241, 0.15);
+    color: rgb(165, 180, 252);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+  }
+  .badge-teal   {
+    @apply badge;
+    background: rgba(20, 184, 166, 0.15);
+    color: rgb(45, 212, 191);
+    border: 1px solid rgba(20, 184, 166, 0.2);
+  }
+  .badge-red    {
+    @apply badge;
+    background: rgba(239, 68, 68, 0.15);
+    color: rgb(252, 165, 165);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+  }
+  .badge-yellow {
+    @apply badge;
+    background: rgba(234, 179, 8, 0.15);
+    color: rgb(253, 224, 71);
+    border: 1px solid rgba(234, 179, 8, 0.2);
+  }
+
+  /* Source card */
+  .source-card {
+    @apply glass rounded-xl p-4 transition-all duration-200 cursor-pointer;
+  }
+  .source-card:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+
+  /* Prose overrides for AI markdown */
+  .prose-ai {
+    @apply text-gray-200 leading-relaxed;
+  }
+  .prose-ai h1, .prose-ai h2, .prose-ai h3 {
+    @apply text-white font-semibold mt-4 mb-2;
+  }
+  .prose-ai h2 { @apply text-lg; }
+  .prose-ai h3 { @apply text-base; }
+  .prose-ai p  { @apply mb-3 text-gray-300; }
+  .prose-ai ul, .prose-ai ol { @apply mb-3 pl-5 space-y-1; }
+  .prose-ai li { @apply text-gray-300; }
+  .prose-ai strong { @apply text-white font-semibold; }
+  .prose-ai a { @apply text-brand-400 underline; }
+  .prose-ai code {
+    @apply text-teal-400 px-1 py-0.5 rounded font-mono text-sm;
+    background: rgba(20, 184, 166, 0.1);
+  }
+  .prose-ai blockquote {
+    @apply border-l-2 border-brand-500 pl-4 text-gray-400 italic;
+  }
+
+  /* Shimmer loading */
+  .shimmer {
+    background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Glow effects */
+  .glow-brand { box-shadow: 0 0 40px rgba(99, 102, 241, 0.15); }
+  .glow-teal  { box-shadow: 0 0 30px rgba(20, 184, 166, 0.15); }
+}

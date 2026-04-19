@@ -159,27 +159,7 @@ export default function ChatPage() {
             <EmptyState onExample={(q) => handleSend(q)} />
           ) : (
             <div className="py-6 space-y-6">
-              {/* Expanded query badge */}
-              <AnimatePresence>
-                {expandedQuery && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="flex flex-col gap-1 text-xs text-gray-500 mb-4 w-full max-w-3xl"
-                  >
-                    <details className="cursor-pointer group">
-                      <summary className="flex items-center gap-2 outline-none select-none text-gray-500 hover:text-gray-300 transition-colors list-none">
-                        <Sparkles size={11} className="text-brand-400 transition-transform group-open:text-brand-300" />
-                        <span>View Expanded AI Search Query</span>
-                      </summary>
-                      <div className="mt-2 p-3 bg-white/5 rounded-lg border border-white/10 text-brand-300/80 font-mono text-[11px] leading-relaxed break-words">
-                        {expandedQuery}
-                      </div>
-                    </details>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Removed Expanded Query Badge entirely as requested */}
 
               {messages.map((msg, i) => (
                 <ChatMessage key={i} message={msg} />

@@ -13,7 +13,7 @@ requests==2.31.0
 # sentence-transformers: used by the ranker (all-MiniLM-L6-v2 embeddings)
 sentence-transformers==2.7.0
 # transformers: loads and runs our fine-tuned flan-t5 model
-transformers==4.40.0
+transformers>=4.41.0
 # peft: required to load LoRA-adapted model weights
 peft==0.10.0
 # accelerate: required by transformers for efficient inference

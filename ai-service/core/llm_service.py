@@ -1,12 +1,9 @@
 """
-LLM Service - Routes to Custom Fine-tuned Flan-T5 Medical Model
-================================================================
-This module is the single entry point for all LLM calls in Curalink.
-On the custom-llm branch, all calls are routed to our fine-tuned
-google/flan-t5-base model hosted on HuggingFace Hub (Pratik-027/curalink-medical-llm).
-
-The Groq/Llama-3 API has been completely removed.
-All inference is local — no external API keys required at runtime.
+LLM Service - Custom Fine-tuned Flan-T5 Medical Model
+=======================================================
+Model: Pratik-027/curalink-medical-llm (fine-tuned on medalpaca/medical_meadow_medqa)
+Base:  google/flan-t5-base + LoRA adapters (0.71% trainable params)
+Groq/Llama-3 API has been completely replaced. No external API keys required.
 """
 import json
 import re

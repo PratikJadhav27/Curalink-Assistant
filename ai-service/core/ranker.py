@@ -57,6 +57,21 @@ def rank_documents(query: str, documents: list[dict], top_k: int = 8) -> list[di
     # Combined score
     combined = 0.60 * semantic_scores + 0.30 * recency_scores + 0.10 * credibility_scores
 
+    # Disease relevance filter for clinical trials
+    # Trials whose title/conditions don't mention the queried disease are penalized
+    # to prevent irrelevant results (e.g. HIV trials appearing in diabetes queries)
+    disease_keywords = _extract_disease_keywords(query)
+    if disease_keywords:
+        for i, doc in enumerate(documents):
+            if doc.get("nctId") or doc.get("type") == "clinical_trial":
+                trial_text = (
+                    doc.get("title", "") + " " +
+                    " ".join(doc.get("conditions", [])) +
+                    " " + doc.get("description", "")
+                ).lower()
+                if not any(kw in trial_text for kw in disease_keywords):
+                    combined[i] *= 0.4  # heavily deprioritize irrelevant trials
+
     # Attach scores and sort
     for i, doc in enumerate(documents):
         doc["relevanceScore"] = float(combined[i])
@@ -83,3 +98,31 @@ def _credibility_bonus(source: str) -> float:
     if "openalex" in src:
         return 0.8
     return 0.5
+
+
+def _extract_disease_keywords(query: str) -> list[str]:
+    """
+    Extract disease-related keywords from the query to use as a relevance filter
+    for clinical trials. Returns lowercase keyword strings.
+    """
+    # Common disease aliases for robust matching
+    disease_map = {
+        "diabetes":    ["diabetes", "diabetic", "glycem", "insulin", "glucose", "t2dm", "t1dm", "hba1c"],
+        "alzheimer":   ["alzheimer", "dementia", "cognitive decline", "amyloid", "tau"],
+        "cancer":      ["cancer", "tumor", "tumour", "oncol", "carcinoma", "malignant"],
+        "heart":       ["heart", "cardiac", "cardiovascular", "coronary", "myocardial"],
+        "hypertension":["hypertension", "blood pressure", "antihypertens"],
+        "asthma":      ["asthma", "bronchial", "airway"],
+        "covid":       ["covid", "sars-cov", "coronavirus"],
+        "depression":  ["depression", "depressive", "antidepressant"],
+        "parkinson":   ["parkinson", "dopamin", "lewy"],
+        "obesity":     ["obesity", "obese", "overweight", "bmi", "weight loss"],
+    }
+    q_lower = query.lower()
+    for disease, keywords in disease_map.items():
+        if disease in q_lower or any(kw in q_lower for kw in keywords):
+            return keywords
+    # Fallback: use significant words from the query itself
+    stop = {"the", "a", "an", "of", "for", "in", "on", "and", "or", "with", "latest", "recent", "new", "treatment", "study", "research"}
+    words = [w for w in q_lower.split() if w not in stop and len(w) > 3]
+    return words[:3]

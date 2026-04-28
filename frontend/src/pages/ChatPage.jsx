@@ -38,7 +38,7 @@ function EmptyState({ onExample }) {
         {[
           { icon: <BookOpen size={16} />, label: '100–200+', sub: 'Papers retrieved' },
           { icon: <FlaskConical size={16} />, label: 'Live trials', sub: 'ClinicalTrials.gov' },
-          { icon: <Sparkles size={16} />, label: 'AI reasoning', sub: 'Llama-3 powered' },
+          { icon: <Sparkles size={16} />, label: 'AI reasoning', sub: 'Flan-T5 fine-tuned' },
         ].map((f, i) => (
           <div key={i} className="glass rounded-xl p-3 text-center">
             <div className="text-brand-400 flex justify-center mb-1">{f.icon}</div>
@@ -223,7 +223,7 @@ export default function ChatPage() {
           )}
 
           <p className="text-center text-xs text-gray-700">
-            Powered by PubMed · OpenAlex · ClinicalTrials.gov · Llama-3 via Groq
+            Powered by PubMed · OpenAlex · ClinicalTrials.gov · Custom Flan-T5 (fine-tuned)
           </p>
         </div>
       </div>

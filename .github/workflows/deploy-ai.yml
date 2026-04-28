@@ -2,7 +2,7 @@ name: Deploy AI Service to Hugging Face
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, custom-llm]
     paths:
       - "ai-service/**" # Only run when files in ai-service change!
 

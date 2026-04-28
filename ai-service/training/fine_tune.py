@@ -214,7 +214,7 @@ trainer = Seq2SeqTrainer(
     args            = training_args,
     train_dataset   = train_tokenized,
     eval_dataset    = eval_tokenized,
-    tokenizer       = tokenizer,
+    processing_class= tokenizer,   # renamed from tokenizer= in transformers>=4.46
     data_collator   = data_collator,
     callbacks       = [EarlyStoppingCallback(early_stopping_patience=2)],
 )

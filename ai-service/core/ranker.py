@@ -57,20 +57,23 @@ def rank_documents(query: str, documents: list[dict], top_k: int = 8) -> list[di
     # Combined score
     combined = 0.60 * semantic_scores + 0.30 * recency_scores + 0.10 * credibility_scores
 
-    # Disease relevance filter for clinical trials
-    # Trials whose title/conditions don't mention the queried disease are penalized
-    # to prevent irrelevant results (e.g. HIV trials appearing in diabetes queries)
+    # Disease relevance filter — applied to BOTH publications and clinical trials
+    # Penalizes documents that don't mention the queried disease anywhere in their text.
+    # This prevents methodology papers and off-topic results from surfacing.
     disease_keywords = _extract_disease_keywords(query)
     if disease_keywords:
         for i, doc in enumerate(documents):
-            if doc.get("nctId") or doc.get("type") == "clinical_trial":
-                trial_text = (
-                    doc.get("title", "") + " " +
-                    " ".join(doc.get("conditions", [])) +
-                    " " + doc.get("description", "")
-                ).lower()
-                if not any(kw in trial_text for kw in disease_keywords):
-                    combined[i] *= 0.4  # heavily deprioritize irrelevant trials
+            is_trial = bool(doc.get("nctId") or doc.get("type") == "clinical_trial")
+            doc_text = (
+                doc.get("title", "") + " " +
+                doc.get("abstract", "") + " " +
+                " ".join(doc.get("conditions", [])) +
+                " " + doc.get("description", "")
+            ).lower()
+            if not any(kw.lower() in doc_text for kw in disease_keywords):
+                # Clinical trials: heavier penalty (must be disease-specific)
+                # Publications: lighter penalty (methodology papers sometimes mention disease)
+                combined[i] *= 0.30 if is_trial else 0.45
 
     # Attach scores and sort
     for i, doc in enumerate(documents):

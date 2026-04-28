@@ -84,9 +84,9 @@ async def research(req: ResearchRequest):
     all_trials = _deduplicate_trials(trial_results + recruiting_trials)
     print(f"🧪 Retrieved {len(all_trials)} clinical trials before ranking")
 
-    # Step 3: Rank publications
+    # Step 3: Rank publications (use original query for disease filtering, expanded for semantics)
     if all_publications:
-        top_publications = rank_documents(expanded_query, all_publications, top_k=8)
+        top_publications = rank_documents(req.query, all_publications, top_k=8)
     else:
         top_publications = []
 
@@ -133,8 +133,31 @@ async def research(req: ResearchRequest):
 
 
 def _infer_disease(query: str) -> str:
-    """Basic fallback disease extraction from query."""
-    return query.split(" ")[0]
+    """
+    Extract the disease/condition name from the user's query.
+    Uses a keyword map first, then strips common stopwords as fallback.
+    """
+    DISEASE_KEYWORDS = [
+        "diabetes", "alzheimer", "cancer", "hypertension", "asthma", "covid",
+        "depression", "parkinson", "obesity", "stroke", "arthritis", "dementia",
+        "heart disease", "lung cancer", "breast cancer", "leukemia", "lymphoma",
+        "multiple sclerosis", "epilepsy", "tuberculosis", "hepatitis", "hiv",
+        "fibromyalgia", "lupus", "crohn", "colitis", "psoriasis", "eczema",
+        "anxiety", "schizophrenia", "bipolar",
+    ]
+    q_lower = query.lower()
+    for kw in DISEASE_KEYWORDS:
+        if kw in q_lower:
+            return kw
+    # Fallback: strip medical/common stopwords and return first meaningful word
+    STOP = {
+        "latest", "recent", "new", "treatment", "for", "of", "the", "a", "an",
+        "in", "and", "or", "with", "clinical", "trials", "study", "research",
+        "what", "is", "are", "how", "best", "top", "find", "show", "get",
+        "papers", "about", "causes", "symptoms", "diagnosis"
+    }
+    words = [w for w in q_lower.split() if w not in STOP and len(w) > 3]
+    return words[0] if words else query
 
 
 def _deduplicate(docs: list[dict]) -> list[dict]:

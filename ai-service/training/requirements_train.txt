@@ -2,12 +2,15 @@
 # Install these in Google Colab before running fine_tune.py:
 #   pip install -r requirements_train.txt
 
-transformers==4.40.0
+# flan-t5-base is 250M params — small enough for regular LoRA (no quantization needed)
+# Install in Colab: pip install -r requirements_train.txt
+# NOTE: bitsandbytes removed intentionally — it causes triton.ops errors on Colab
+
+transformers>=4.41.0
 peft==0.10.0
 datasets==2.19.0
-accelerate==0.29.3
-bitsandbytes==0.43.1    # for QLoRA 4-bit quantization
+accelerate>=0.29.3
 sentencepiece==0.2.0
-huggingface_hub==0.22.2
+huggingface_hub>=0.22.2
 torch>=2.0.0            # Colab provides GPU torch automatically
 evaluate==0.4.2

@@ -2,10 +2,23 @@ fastapi==0.110.0
 uvicorn[standard]==0.29.0
 httpx==0.27.0
 aiohttp==3.9.5
-sentence-transformers==2.7.0
-groq==0.5.0
 numpy==1.26.4
 scikit-learn==1.4.2
 python-dotenv==1.0.1
 pydantic==2.7.0
 lxml==5.2.1
+requests==2.31.0
+
+# Custom LLM dependencies (replaces groq)
+# sentence-transformers: used by the ranker (all-MiniLM-L6-v2 embeddings)
+sentence-transformers==2.7.0
+# transformers: loads and runs our fine-tuned flan-t5 model
+transformers>=4.41.0
+# peft: required to load LoRA-adapted model weights
+peft==0.10.0
+# accelerate: required by transformers for efficient inference
+accelerate==0.29.3
+# sentencepiece: required by flan-t5 tokenizer
+sentencepiece==0.2.0
+# torch (CPU-only build — much smaller image, works on HF Spaces free tier)
+torch==2.2.2

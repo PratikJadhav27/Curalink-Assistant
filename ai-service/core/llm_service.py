@@ -1,68 +1,41 @@
 """
-LLM Service - Groq-powered Llama-3 for synthesis and query expansion
+LLM Service - Routes to Custom Fine-tuned Flan-T5 Medical Model
+================================================================
+This module is the single entry point for all LLM calls in Curalink.
+On the custom-llm branch, all calls are routed to our fine-tuned
+google/flan-t5-base model hosted on HuggingFace Hub (Pratik-027/curalink-medical-llm).
+
+The Groq/Llama-3 API has been completely removed.
+All inference is local — no external API keys required at runtime.
 """
-import os
 import json
 import re
-from dotenv import load_dotenv
-from groq import Groq
+import logging
 
-# Load .env BEFORE reading env vars (fixes module-level import order issue)
-load_dotenv()
+# ── Import from our custom fine-tuned model service ──────────────────────
+from core.custom_llm import (
+    expand_query as _custom_expand_query,
+    synthesize_response as _custom_synthesize,
+)
 
-_client = None
-
-def _get_client() -> Groq:
-    global _client
-    if _client is None:
-        api_key = os.environ.get("GROQ_API_KEY")
-        if not api_key:
-            raise RuntimeError("GROQ_API_KEY is not set. Add it to ai-service/.env")
-        _client = Groq(api_key=api_key)
-    return _client
-
-MODEL = "llama-3.1-8b-instant"
+logger = logging.getLogger(__name__)
 
 
-SYSTEM_PROMPT = """You are Curalink, an elite AI Medical Research Assistant.
-Your role is to synthesize peer-reviewed research publications and clinical trials into structured, 
-personalized, and source-backed medical insights for healthcare professionals and patients.
-
-STRICT RULES:
-- Never fabricate citations, statistics, or medical claims not present in the provided context.
-- Always ground your responses in the retrieved publications and clinical trials provided.
-- Use compassionate but precise clinical language.
-- Structure every response using the exact JSON format requested.
-- If insufficient data exists for a section, explicitly state "Insufficient data available."
-"""
-
-
+# ── Public API: Query Expansion ───────────────────────────────────────────
 def expand_query(disease: str, query: str, patient_context: dict) -> str:
-    """Use LLM to expand and optimize search query for medical databases."""
-    prompt = f"""You are a medical search query optimizer.
-Given:
-- Disease/Condition: {disease}
-- User Query: {query}
-- Patient Context: {json.dumps(patient_context)}
-
-Generate an optimized, expanded medical search query string suitable for PubMed, OpenAlex, and ClinicalTrials.gov.
-Combine the disease with specific medical terms from the query.
-Return ONLY the expanded query string. No explanations. No quotes. Just the query."""
-
-    try:
-        response = _get_client().chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=120,
-            temperature=0.3,
-        )
-        expanded = response.choices[0].message.content.strip()
-        return expanded
-    except Exception:
-        # Fallback - simple concatenation
-        return f"{disease} {query}".strip()
+    """
+    Expand and optimize the user's search query for medical databases.
+    Uses our fine-tuned flan-t5 model (no external API call).
+    """
+    logger.info(f"[LLMService] Expanding query for disease='{disease}', query='{query}'")
+    return _custom_expand_query(
+        disease=disease,
+        query=query,
+        patient_context=patient_context,
+    )
 
 
+# ── Public API: Synthesis ────────────────────────────────────────────────
 def synthesize_response(
     query: str,
     patient_context: dict,
@@ -71,82 +44,21 @@ def synthesize_response(
     conversation_history: list[dict],
 ) -> dict:
     """
-    Core reasoning: given top results, generate structured medical response.
-    Returns dict with: answer, conditionOverview, queryExpanded.
+    Core reasoning: given top-ranked results, generate a structured medical response.
+    Uses our fine-tuned flan-t5 model (no external API call).
+    Returns dict with: conditionOverview, answer.
     """
-    # Build context chunks
-    pub_context = _format_publications(publications)
-    trial_context = _format_trials(clinical_trials)
-    patient_str = _format_patient(patient_context)
-
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    # Inject conversation history (last 6 turns max)
-    for msg in conversation_history[-6:]:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-
-    user_prompt = f"""PATIENT CONTEXT:
-{patient_str}
-
-USER QUESTION: {query}
-
-RETRIEVED RESEARCH PUBLICATIONS:
-{pub_context}
-
-RETRIEVED CLINICAL TRIALS:
-{trial_context}
-
----
-Based on the above publications and clinical trials, provide a comprehensive, personalized response.
-
-Your response must be a valid JSON object with this exact structure:
-{{
-  "conditionOverview": "<2-3 sentence overview of the condition and its current research landscape>",
-  "answer": "<Detailed, personalized, research-backed answer tailored to the patient's context. Use markdown for formatting. Reference specific studies and their findings. Explain clinical trial relevance if applicable.>"
-}}
-
-Be thorough. Be specific. Be human. Never hallucinate citations."""
-
-    messages.append({"role": "user", "content": user_prompt})
-
-    try:
-        response = _get_client().chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            max_tokens=1800,
-            temperature=0.4,
-            response_format={"type": "json_object"},
-        )
-        raw = response.choices[0].message.content.strip()
-        return _parse_json_response(raw)
-    except Exception as e:
-        return {
-            "conditionOverview": "Unable to generate overview at this time.",
-            "answer": f"I encountered an error generating your research summary. Please try again. Error: {str(e)}",
-        }
+    logger.info(f"[LLMService] Synthesizing response for query='{query}'")
+    return _custom_synthesize(
+        query=query,
+        patient_context=patient_context,
+        publications=publications,
+        clinical_trials=clinical_trials,
+        conversation_history=conversation_history,
+    )
 
 
-def _parse_json_response(raw: str) -> dict:
-    """Extract JSON from LLM response robustly."""
-    # Try direct parse
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    # Try to extract JSON block
-    match = re.search(r'\{.*\}', raw, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
-    # Fallback
-    return {
-        "conditionOverview": "",
-        "answer": raw,
-    }
-
-
+# ── Formatting Helpers (kept for compatibility) ───────────────────────────
 def _format_publications(publications: list[dict]) -> str:
     if not publications:
         return "No publications retrieved."
@@ -185,3 +97,21 @@ def _format_patient(ctx: dict) -> str:
     if ctx.get("additionalInfo"):
         parts.append(f"Additional Context: {ctx['additionalInfo']}")
     return "\n".join(parts) if parts else "No specific patient context provided."
+
+
+def _parse_json_response(raw: str) -> dict:
+    """Extract JSON from LLM response robustly (kept for compatibility)."""
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r'\{.*\}', raw, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+    return {
+        "conditionOverview": "",
+        "answer": raw,
+    }

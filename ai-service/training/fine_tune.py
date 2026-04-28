@@ -196,14 +196,14 @@ training_args = Seq2SeqTrainingArguments(
     weight_decay                = 0.01,
     logging_dir                 = f"{OUTPUT_DIR}/logs",
     logging_steps               = 50,
-    evaluation_strategy         = "epoch",
+    eval_strategy               = "epoch",   # renamed from evaluation_strategy in transformers>=4.41
     save_strategy               = "epoch",
     load_best_model_at_end      = True,
     metric_for_best_model       = "eval_loss",
     predict_with_generate       = True,
-    fp16                        = True,     # Mixed precision - speeds up training on T4
-    dataloader_pin_memory       = False,    # Avoids OOM on Colab
-    report_to                   = "none",   # Disable wandb
+    fp16                        = False,     # Set False to avoid GradScaler issues on some T4 setups
+    dataloader_pin_memory       = False,     # Avoids OOM on Colab
+    report_to                   = "none",    # Disable wandb
 )
 
 # ── Step 8: Trainer ─────────────────────────────────────────────────────
@@ -214,7 +214,7 @@ trainer = Seq2SeqTrainer(
     args            = training_args,
     train_dataset   = train_tokenized,
     eval_dataset    = eval_tokenized,
-    tokenizer       = tokenizer,
+    processing_class= tokenizer,   # renamed from tokenizer= in transformers>=4.46
     data_collator   = data_collator,
     callbacks       = [EarlyStoppingCallback(early_stopping_patience=2)],
 )

@@ -17,7 +17,7 @@ transformers>=4.41.0
 # peft: required to load LoRA-adapted model weights
 peft==0.10.0
 # accelerate: required by transformers for efficient inference
-accelerate==0.29.3
+accelerate>=1.1.0
 # sentencepiece: required by flan-t5 tokenizer
 sentencepiece==0.2.0
 # torch (CPU-only build — much smaller image, works on HF Spaces free tier)

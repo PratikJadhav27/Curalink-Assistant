@@ -50,6 +50,11 @@ async def startup_event():
     print("[INIT] Loading embedding model...")
     EmbeddingService.get_instance()
     print("[INIT] ✅ Embedding model loaded")
+    
+    print("[INIT] Loading Custom LLM pipeline...")
+    from core.custom_llm import _get_pipeline
+    _get_pipeline()
+    print("[INIT] ✅ Custom LLM pipeline loaded")
 
 
 app.include_router(research.router)

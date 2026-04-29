@@ -52,20 +52,20 @@ async def research(req: ResearchRequest):
     print(f"🔍 Expanded query: '{expanded_query}'")
 
     # Step 2: Concurrent retrieval from all 3 sources
-    pub_task_pm = fetch_pubmed(expanded_query, max_results=100)
-    pub_task_oa = fetch_openalex(expanded_query, max_results=100)
+    pub_task_pm = fetch_pubmed(expanded_query, max_results=50)
+    pub_task_oa = fetch_openalex(expanded_query, max_results=50)
     trial_task = fetch_clinical_trials(
         disease=disease,
         query=req.query,
         location=location or None,
-        max_results=50,
+        max_results=30,
     )
     # Also fetch recruiting-specific trials
     trial_task_recruiting = fetch_clinical_trials(
         disease=disease,
         query=req.query,
         location=location or None,
-        max_results=30,
+        max_results=20,
         status_filter="RECRUITING",
     )
 

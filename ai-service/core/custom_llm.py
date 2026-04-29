@@ -240,7 +240,7 @@ def _clinical_takeaway_flan(query: str, disease: str, findings: list) -> str:
     )
     try:
         pipe = _get_pipeline()
-        out = pipe(prompt, max_new_tokens=80, num_beams=4,
+        out = pipe(prompt, max_new_tokens=60, num_beams=2,
                    early_stopping=True, no_repeat_ngram_size=3)
         text = out[0]["generated_text"].strip()
         return text if len(text) > 30 else ""

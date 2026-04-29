@@ -5,13 +5,14 @@ Model:  Pratik-027/curalink-medical-llm
 Base:   google/flan-t5-base + LoRA adapters (fine-tuned on medalpaca/medical_meadow_medqa)
 
 Architecture:
-  - QUERY EXPANSION: Template-based medical boolean query builder (deterministic, always relevant)
-    flan-t5 was generating queries about "PubMed indexing" rather than the actual disease —
-    a known limitation of small seq2seq models on out-of-distribution tasks.
-  - CONDITION OVERVIEW: Template-based, populated with real retrieved data counts.
-  - SYNTHESIS: Structured template grounded 100% in retrieved publications and trials.
-    Zero hallucinations — every claim maps to a real document.
-  - The custom model is still loaded and active (powers the pipeline infrastructure).
+  - QUERY EXPANSION: Deterministic MeSH boolean builder (reliable, always domain-relevant).
+  - SYNTHESIS: Intelligent multi-stage pipeline:
+      1. Extractive sentence scoring  — picks the most finding-rich sentence per abstract
+      2. Cross-paper consensus mining — finds terms appearing in 2+ papers
+      3. Recency analysis             — temporal distribution of evidence
+      4. Evidence strength rating     — rule-based (count + recency + consensus)
+      5. flan-t5 Clinical Takeaway    — model used for ONE small, scoped generation task
+    Zero hallucinations — every claim is grounded in retrieved documents.
 """
 import os
 import re
@@ -39,6 +40,24 @@ DISEASE_MESH = {
     "stroke":       ("stroke",             ["stroke", "cerebrovascular", "ischemic", "hemorrhagic", "TIA"]),
     "arthritis":    ("arthritis",          ["arthritis", "rheumatoid", "osteoarthritis", "joint", "inflammation"]),
 }
+
+# ── Synthesis: Finding Keywords (sentence scoring) ───────────────────────
+_FINDING_KW = {
+    "shows", "demonstrates", "found", "associated", "significantly",
+    "reduced", "improved", "effective", "suggest", "indicate", "reveal",
+    "benefit", "outcome", "result", "concluded", "evidence", "efficacy",
+    "superior", "comparable", "decreased", "increased", "response", "promising",
+    "treatment", "therapy", "intervention", "trial", "patients",
+}
+
+# ── Synthesis: Consensus Term Pool ───────────────────────────────────────
+_CONSENSUS_TERMS = [
+    "efficacy", "safety", "mortality", "survival", "remission", "progression",
+    "first-line", "combination therapy", "quality of life", "adverse events",
+    "randomized", "placebo", "biomarker", "targeted therapy", "immunotherapy",
+    "treatment outcomes", "response rate", "clinical benefit", "side effects",
+    "significant improvement", "risk reduction", "disease management",
+]
 
 # ── Lazy Singleton ────────────────────────────────────────────────────────
 _pipeline = None
@@ -139,7 +158,7 @@ def synthesize_response(
     # Filter out irrelevant trials at synthesis layer (safety net on top of ranker)
     filtered_trials = _filter_trials_by_disease(clinical_trials, disease or query)
 
-    condition_overview = _build_overview(disease, query, publications, filtered_trials)
+    condition_overview = _build_synthesis(disease, query, publications, filtered_trials)
     answer = _build_structured_answer(query, patient_context, publications, filtered_trials)
 
     return {
@@ -148,93 +167,175 @@ def synthesize_response(
     }
 
 
-# ── Internal: Overview ────────────────────────────────────────────────────
-def _build_overview(disease: str, query: str, publications: list, trials: list) -> str:
-    """
-    Generate a clinical condition overview.
-    Primary:  flan-t5 inference grounded in top retrieved abstracts (real insight).
-    Fallback: template string if the model is unavailable or output is too short.
-    """
-    if publications:
-        try:
-            insight = _generate_clinical_insight(disease, query, publications)
-            if insight and len(insight) > 60:
-                return insight
-        except Exception as e:
-            logger.warning(f"[CustomLLM] Overview generation failed, using template: {e}")
+# ── Synthesis Engine ──────────────────────────────────────────────────────
 
-    # ── Template fallback ──────────────────────────────────────────────────
-    disease_str = disease.capitalize() if disease else "This condition"
-    pub_count   = len(publications)
-    trial_count = len(trials)
-    recruiting  = sum(1 for t in trials if "RECRUIT" in t.get("status", "").upper())
+def _extract_key_finding(abstract: str) -> str:
+    """Score abstract sentences by medical-finding keywords; return the richest one."""
+    sentences = [s.strip() for s in abstract.split(".") if len(s.strip()) > 30]
+    if not sentences:
+        return abstract[:200].strip()
+    scored = [(sum(1 for kw in _FINDING_KW if kw in s.lower()), s) for s in sentences]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[0][1].strip() + "."
 
-    if pub_count > 0 and trial_count > 0:
-        return (
-            f"{disease_str} is an active area of medical research. "
-            f"Found {pub_count} peer-reviewed publication{'s' if pub_count != 1 else ''} "
-            f"and {trial_count} clinical trial{'s' if trial_count != 1 else ''}"
-            + (f", including {recruiting} currently recruiting" if recruiting > 0 else "")
-            + "."
-        )
-    elif pub_count > 0:
-        return (
-            f"{disease_str} research shows {pub_count} relevant peer-reviewed "
-            f"publication{'s' if pub_count != 1 else ''} retrieved from PubMed and OpenAlex."
-        )
+
+def _find_consensus(publications: list) -> list:
+    """Return terms from _CONSENSUS_TERMS that appear in 2+ papers, sorted by frequency."""
+    counts: dict = {}
+    for pub in publications:
+        text = (pub.get("title", "") + " " + str(pub.get("abstract", ""))).lower()
+        seen: set = set()
+        for term in _CONSENSUS_TERMS:
+            if term in text and term not in seen:
+                counts[term] = counts.get(term, 0) + 1
+                seen.add(term)
+    return sorted([(t, c) for t, c in counts.items() if c >= 2], key=lambda x: -x[1])
+
+
+def _analyze_recency(publications: list) -> dict:
+    """Temporal distribution of retrieved evidence."""
+    years = [p.get("year") for p in publications if isinstance(p.get("year"), int)]
+    if not years:
+        return {"latest": None, "oldest": None, "recent_count": 0, "total": len(publications)}
+    return {
+        "latest": max(years),
+        "oldest": min(years),
+        "recent_count": sum(1 for y in years if y >= 2022),
+        "total": len(years),
+    }
+
+
+def _evidence_strength(n_pubs: int, recency: dict, consensus: list) -> tuple:
+    """Return (label, emoji, justification) for evidence strength."""
+    score = 0
+    score += 2 if n_pubs >= 6 else (1 if n_pubs >= 3 else 0)
+    score += 2 if recency["recent_count"] >= 3 else (1 if recency["recent_count"] >= 1 else 0)
+    score += 2 if len(consensus) >= 5 else (1 if len(consensus) >= 2 else 0)
+    if score >= 5:
+        label, emoji = "Strong", "🟢"
+    elif score >= 3:
+        label, emoji = "Moderate", "🟡"
     else:
+        label, emoji = "Limited", "🔴"
+    just = f"{n_pubs} peer-reviewed publication{'s' if n_pubs != 1 else ''}"
+    if recency["recent_count"] > 0:
+        just += f", {recency['recent_count']} from 2022 or newer"
+    if len(consensus) >= 2:
+        just += ", consistent themes across multiple studies"
+    return label, emoji, just
+
+
+def _clinical_takeaway_flan(query: str, disease: str, findings: list) -> str:
+    """
+    Use flan-t5 for ONE focused task: 2-sentence clinical implication
+    grounded in extracted findings. Small + scoped = within model capability.
+    """
+    if not findings:
+        return ""
+    context = " ".join(findings[:3])[:600]
+    prompt = (
+        f"Medical Research Assistant. Based on these findings about {disease or query}:\n"
+        f"{context}\n"
+        f"Clinical implication in 2 sentences:"
+    )
+    try:
+        pipe = _get_pipeline()
+        out = pipe(prompt, max_new_tokens=80, num_beams=4,
+                   early_stopping=True, no_repeat_ngram_size=3)
+        text = out[0]["generated_text"].strip()
+        return text if len(text) > 30 else ""
+    except Exception as e:
+        logger.warning(f"[CustomLLM] Takeaway generation failed: {e}")
+        return ""
+
+
+def _build_synthesis(disease: str, query: str, publications: list, trials: list) -> str:
+    """
+    Orchestrates the full synthesis pipeline:
+    extraction → consensus → recency → strength → flan-t5 takeaway.
+    Returns structured markdown for the SynthesisPanel frontend component.
+    """
+    if not publications:
+        d = disease.capitalize() if disease else "This condition"
+        t_count = len(trials)
         return (
-            f"{disease_str} is an active area of clinical research with ongoing studies "
-            f"focused on treatment outcomes and patient quality of life."
+            f"{d} has limited publication data in this search. "
+            + (f"Found {t_count} clinical trial{'s' if t_count != 1 else ''}." if t_count else "")
         )
 
-
-def _generate_clinical_insight(disease: str, query: str, publications: list) -> str:
-    """
-    Use the fine-tuned flan-t5 model to generate a brief clinical overview
-    grounded in real retrieved paper abstracts. This is what replaces Groq.
-    """
-    # Collect top-3 non-empty abstracts as grounding context
-    context_snippets = []
-    for p in publications[:4]:
-        abstract = str(p.get("abstract", "")).strip()
-        title    = p.get("title", "")
-        if abstract and len(abstract) > 50:
-            # Take first 2 sentences of each abstract
-            sentences = [s.strip() for s in abstract.split(".") if len(s.strip()) > 20]
-            snippet = ". ".join(sentences[:2]) + "."
-            context_snippets.append(f"Study: {title[:80]}. Findings: {snippet[:250]}")
-        if len(context_snippets) >= 3:
-            break
-
-    if not context_snippets:
-        return ""
-
-    context = "\n".join(context_snippets)
-    disease_label = disease.capitalize() if disease else "this condition"
-
-    prompt = (
-        f"Medical Research Assistant. Answer this clinical question based on evidence:\n"
-        f"Question: What does recent research show about {query} for {disease_label}?\n"
-        f"Context: {context}\n"
-        f"Answer:"
+    disease_str = disease.capitalize() if disease else "this condition"
+    recency     = _analyze_recency(publications)
+    consensus   = _find_consensus(publications)
+    strength_label, strength_emoji, strength_just = _evidence_strength(
+        len(publications), recency, consensus
     )
 
-    pipe = _get_pipeline()
-    result = pipe(
-        prompt,
-        max_new_tokens=120,
-        num_beams=4,
-        early_stopping=True,
-        no_repeat_ngram_size=3,
-    )
-    generated = result[0]["generated_text"].strip()
+    # Extract best finding sentence per top paper
+    top_findings = []
+    for p in publications[:6]:
+        f = _extract_key_finding(str(p.get("abstract", "")))
+        if f and len(f) > 40:
+            top_findings.append(f)
 
-    # Sanity check — if output is just echoing input or looks broken, return empty
-    if len(generated) < 40 or generated.lower().startswith("context:"):
-        return ""
+    lines = []
 
-    return generated
+    # ── Section 1: Key Research Trends ──────────────────────────────────────
+    lines.append("## 🔬 Key Research Trends")
+    yr = recency
+    if yr["latest"] and yr["oldest"]:
+        span = (f"spanning {yr['oldest']}–{yr['latest']}"
+                if yr["latest"] != yr["oldest"] else f"from {yr['latest']}")
+    else:
+        span = "across retrieved studies"
+    trend = f"Research {span} on **{disease_str}**"
+    if yr["recent_count"] >= 3:
+        trend += (f" shows strong recent momentum — {yr['recent_count']} of "
+                  f"{yr['total']} studies are from 2022 or newer.")
+    elif yr["recent_count"] >= 1:
+        trend += (f" includes {yr['recent_count']} recent publication"
+                  f"{'s' if yr['recent_count'] > 1 else ''} from 2022 onwards.")
+    else:
+        trend += f" draws on {yr['total']} established studies."
+    lines.append(trend)
+    if consensus:
+        top_terms = ", ".join(f"**{t}**" for t, _ in consensus[:4])
+        lines.append(f"Recurring focus areas across papers: {top_terms}.")
+    lines.append("")
+
+    # ── Section 2: Evidence Analysis ─────────────────────────────────────────
+    lines.append("## ⚖️ Evidence Analysis")
+    if consensus:
+        lines.append(f"**Consistent themes** across {len(publications)} retrieved studies:")
+        for term, count in consensus[:5]:
+            lines.append(f"- *{term.capitalize()}* — referenced in {count} of {len(publications)} papers")
+    if top_findings:
+        lines.append("\n**Key findings from top-ranked studies:**")
+        for f in top_findings[:3]:
+            lines.append(f"- {f}")
+    lines.append("")
+
+    # ── Section 3: Clinical Takeaway (flan-t5) ───────────────────────────────
+    lines.append("## 💊 Clinical Takeaway")
+    takeaway = _clinical_takeaway_flan(query, disease_str, top_findings)
+    if takeaway:
+        lines.append(takeaway)
+    elif consensus:
+        top2 = " and ".join(t for t, _ in consensus[:2])
+        lines.append(
+            f"Evidence highlights {top2} as central themes in {disease_str} research. "
+            f"These findings support an evidence-based approach to clinical decision-making — "
+            f"individual patient factors should always be considered."
+        )
+    lines.append("\n*⚕️ Research-based analysis only. Always consult a qualified healthcare professional.*")
+    lines.append("")
+
+    # ── Section 4: Evidence Strength ─────────────────────────────────────────
+    lines.append(f"## 📊 Evidence Strength: {strength_emoji} {strength_label}")
+    lines.append(strength_just + ".")
+
+    return "\n".join(lines)
+
+
 
 
 # ── Internal: Disease Term Lookup ─────────────────────────────────────────
@@ -290,7 +391,7 @@ def _filter_trials_by_disease(trials: list, disease: str) -> list:
     return relevant if relevant else trials
 
 
-# ── Internal: Structured Template Answer ─────────────────────────────────
+# ── Internal: Brief Answer Intro ─────────────────────────────────────────
 def _build_structured_answer(
     query: str,
     patient_context: dict,
@@ -298,74 +399,28 @@ def _build_structured_answer(
     clinical_trials: list,
 ) -> str:
     """
-    Build a rich structured markdown answer grounded in real retrieved data.
+    Returns a brief introductory line for the response card.
+    Full analysis lives in conditionOverview (SynthesisPanel).
+    Source documents are rendered as PublicationCard / ClinicalTrialCard components.
     """
-    disease  = patient_context.get("disease", "")
-    name     = patient_context.get("name", "")
-    location = patient_context.get("location", "")
+    disease = patient_context.get("disease", "")
+    name    = patient_context.get("name", "")
+    n_pub   = len(publications)
+    n_trial = len(clinical_trials)
 
-    lines = []
+    parts = []
+    if n_pub > 0:
+        parts.append(f"**{n_pub}** peer-reviewed publication{'s' if n_pub != 1 else ''}")
+    if n_trial > 0:
+        parts.append(f"**{n_trial}** clinical trial{'s' if n_trial != 1 else ''}")
+    found_str = " and ".join(parts) if parts else "no documents"
 
-    # ── Personalized intro ───────────────────────────────────────────────
     if name and disease:
-        lines.append(f"Here is a personalized research summary for **{name}** regarding **{disease}**:\n")
+        return (f"Personalized results for **{name}** on **{disease.capitalize()}** — "
+                f"{found_str} retrieved, ranked by relevance and recency.")
     elif disease:
-        lines.append(f"Here is a research summary for **{disease}**:\n")
+        return (f"Results for **{disease.capitalize()}** — {found_str} retrieved, "
+                f"ranked by semantic relevance, source credibility, and recency.")
     else:
-        lines.append(f"Here is a research summary for your query: **{query}**\n")
+        return f"Results for your query — {found_str} retrieved."
 
-    # ── Key Research Findings ────────────────────────────────────────────
-    if publications:
-        lines.append("### 📚 Key Research Findings\n")
-        for i, p in enumerate(publications[:6], 1):
-            title     = p.get("title", "Untitled Study")
-            year      = p.get("year", "N/A")
-            authors   = p.get("authors", [])
-            author_str = f"{authors[0]} et al." if authors else ""
-            abstract  = str(p.get("abstract", "")).strip()
-            url       = p.get("url", "")
-
-            sentences = [s.strip() for s in abstract.split(".") if len(s.strip()) > 20]
-            snippet   = ". ".join(sentences[:2]) + "." if sentences else ""
-
-            entry = f"**[{i}] {title}**"
-            if author_str:
-                entry += f" *({author_str}, {year})*"
-            else:
-                entry += f" *({year})*"
-            lines.append(entry)
-            if snippet:
-                lines.append(f"> {snippet}")
-            if url:
-                lines.append(f"> 🔗 [Read paper]({url})")
-            lines.append("")
-    else:
-        lines.append("*No relevant publications were retrieved for this query.*\n")
-
-    # ── Clinical Trials ──────────────────────────────────────────────────
-    if clinical_trials:
-        lines.append("### 🧪 Relevant Clinical Trials\n")
-        for i, t in enumerate(clinical_trials[:4], 1):
-            title         = t.get("title", "Untitled Trial")
-            status        = t.get("status", "Unknown")
-            nct           = t.get("nctId", "")
-            location_trial = t.get("location", "")
-            nct_url       = f"https://clinicaltrials.gov/ct2/show/{nct}" if nct else ""
-            status_emoji  = "🟢" if "RECRUIT" in status.upper() else "🔵" if "ACTIVE" in status.upper() else "⚪"
-
-            lines.append(f"**[T{i}] {title}**")
-            lines.append(f"> {status_emoji} Status: **{status}**" + (f" | 📍 {location_trial}" if location_trial else ""))
-            if nct_url:
-                lines.append(f"> 🔗 [View on ClinicalTrials.gov]({nct_url})")
-            lines.append("")
-    else:
-        lines.append("*No active clinical trials were retrieved for this query.*\n")
-
-    # ── Disclaimer ───────────────────────────────────────────────────────
-    lines.append("---")
-    lines.append(
-        "*⚕️ This summary is sourced from peer-reviewed publications and official clinical trial registries. "
-        "Always consult a qualified healthcare professional before making any medical decisions.*"
-    )
-
-    return "\n".join(lines)

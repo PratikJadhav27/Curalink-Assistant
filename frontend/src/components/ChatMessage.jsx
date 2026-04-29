@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
-import { Bot, User, ChevronDown, ChevronUp, BookOpen, FlaskConical, TrendingUp, Info, Zap } from 'lucide-react';
+import { Bot, User, ChevronDown, ChevronUp, BookOpen, FlaskConical, TrendingUp, Zap } from 'lucide-react';
 import PublicationCard from './PublicationCard';
 import ClinicalTrialCard from './ClinicalTrialCard';
 
@@ -20,7 +20,41 @@ function ThinkingDots() {
   );
 }
 
-function StructuredSection({ title, icon, badgeClass, children, defaultOpen = true }) {
+function SynthesisPanel({ content }) {
+  const [open, setOpen] = useState(true);
+  if (!content) return null;
+  return (
+    <div className="mb-3 border border-brand-500/25 rounded-xl overflow-hidden bg-brand-950/20">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-brand-900/40 hover:bg-brand-900/60 transition-colors"
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold text-brand-300">
+          <TrendingUp size={14} />
+          AI Research Synthesis
+        </span>
+        {open ? <ChevronUp size={14} className="text-gray-500" /> : <ChevronDown size={14} className="text-gray-500" />}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="overflow-hidden"
+          >
+            <div className="px-5 py-4 prose-ai text-sm leading-relaxed">
+              <ReactMarkdown>{content}</ReactMarkdown>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function StructuredSection({ title, icon, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="mt-4 border border-white/5 rounded-xl overflow-hidden">
@@ -31,11 +65,6 @@ function StructuredSection({ title, icon, badgeClass, children, defaultOpen = tr
         <span className="flex items-center gap-2 text-sm font-semibold text-white">
           {icon}
           {title}
-          {badgeClass && (
-            <span className={`badge ${badgeClass} ml-1`}>
-              {React.Children.count(children)} items
-            </span>
-          )}
         </span>
         {open ? <ChevronUp size={16} className="text-gray-500" /> : <ChevronDown size={16} className="text-gray-500" />}
       </button>
@@ -111,15 +140,10 @@ export default function ChatMessage({ message, isTyping }) {
       </div>
 
       <div className="flex-1 min-w-0">
-        {/* Condition Overview */}
-        {overview && (
-          <div className="flex items-start gap-2 mb-3 p-3 bg-teal-500/8 border border-teal-500/15 rounded-xl">
-            <Info size={14} className="text-teal-400 mt-0.5 shrink-0" />
-            <p className="text-sm text-teal-100/80 leading-relaxed">{overview}</p>
-          </div>
-        )}
+        {/* Synthesis Panel — full 4-section analysis */}
+        <SynthesisPanel content={overview} />
 
-        {/* Main LLM Answer */}
+        {/* Brief intro card */}
         <div className="glass rounded-2xl rounded-tl-sm px-5 py-4">
           <div className="prose-ai text-sm">
             <ReactMarkdown>{message.content}</ReactMarkdown>

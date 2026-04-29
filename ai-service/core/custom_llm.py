@@ -151,15 +151,23 @@ def synthesize_response(
 # ── Internal: Overview ────────────────────────────────────────────────────
 def _build_overview(disease: str, query: str, publications: list, trials: list) -> str:
     """
-    Generate a factual, grounded condition overview using real retrieved data counts.
-    Template-based — zero hallucinations.
+    Generate a clinical condition overview.
+    Primary:  flan-t5 inference grounded in top retrieved abstracts (real insight).
+    Fallback: template string if the model is unavailable or output is too short.
     """
+    if publications:
+        try:
+            insight = _generate_clinical_insight(disease, query, publications)
+            if insight and len(insight) > 60:
+                return insight
+        except Exception as e:
+            logger.warning(f"[CustomLLM] Overview generation failed, using template: {e}")
+
+    # ── Template fallback ──────────────────────────────────────────────────
     disease_str = disease.capitalize() if disease else "This condition"
     pub_count   = len(publications)
     trial_count = len(trials)
-
-    # Count recruiting trials specifically
-    recruiting = sum(1 for t in trials if "RECRUIT" in t.get("status", "").upper())
+    recruiting  = sum(1 for t in trials if "RECRUIT" in t.get("status", "").upper())
 
     if pub_count > 0 and trial_count > 0:
         return (
@@ -181,7 +189,56 @@ def _build_overview(disease: str, query: str, publications: list, trials: list) 
         )
 
 
+def _generate_clinical_insight(disease: str, query: str, publications: list) -> str:
+    """
+    Use the fine-tuned flan-t5 model to generate a brief clinical overview
+    grounded in real retrieved paper abstracts. This is what replaces Groq.
+    """
+    # Collect top-3 non-empty abstracts as grounding context
+    context_snippets = []
+    for p in publications[:4]:
+        abstract = str(p.get("abstract", "")).strip()
+        title    = p.get("title", "")
+        if abstract and len(abstract) > 50:
+            # Take first 2 sentences of each abstract
+            sentences = [s.strip() for s in abstract.split(".") if len(s.strip()) > 20]
+            snippet = ". ".join(sentences[:2]) + "."
+            context_snippets.append(f"Study: {title[:80]}. Findings: {snippet[:250]}")
+        if len(context_snippets) >= 3:
+            break
+
+    if not context_snippets:
+        return ""
+
+    context = "\n".join(context_snippets)
+    disease_label = disease.capitalize() if disease else "this condition"
+
+    prompt = (
+        f"Medical Research Assistant. Answer this clinical question based on evidence:\n"
+        f"Question: What does recent research show about {query} for {disease_label}?\n"
+        f"Context: {context}\n"
+        f"Answer:"
+    )
+
+    pipe = _get_pipeline()
+    result = pipe(
+        prompt,
+        max_new_tokens=120,
+        num_beams=4,
+        early_stopping=True,
+        no_repeat_ngram_size=3,
+    )
+    generated = result[0]["generated_text"].strip()
+
+    # Sanity check — if output is just echoing input or looks broken, return empty
+    if len(generated) < 40 or generated.lower().startswith("context:"):
+        return ""
+
+    return generated
+
+
 # ── Internal: Disease Term Lookup ─────────────────────────────────────────
+
 def _get_disease_terms(query: str) -> tuple:
     """Return (mesh_term, keywords_list) for the detected disease."""
     q = query.lower()

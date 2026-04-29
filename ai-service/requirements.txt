@@ -9,7 +9,9 @@ pydantic==2.7.0
 lxml==5.2.1
 requests==2.31.0
 
-# Custom LLM dependencies (replaces groq)
+# Hybrid LLM dependencies
+# groq: Llama-3.3-70B-Versatile for deep synthesis (RAG-grounded, low latency)
+groq>=0.11.0
 # sentence-transformers: used by the ranker (all-MiniLM-L6-v2 embeddings)
 sentence-transformers==2.7.0
 # transformers: loads and runs our fine-tuned flan-t5 model

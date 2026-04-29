@@ -1,9 +1,10 @@
 """
-LLM Service - Custom Fine-tuned Flan-T5 Medical Model
-=======================================================
-Model: Pratik-027/curalink-medical-llm (fine-tuned on medalpaca/medical_meadow_medqa)
-Base:  google/flan-t5-base + LoRA adapters (0.71% trainable params)
-Groq/Llama-3 API has been completely replaced. No external API keys required.
+LLM Service — Hybrid Architecture (Groq Llama-3 + Custom Flan-T5)
+===================================================================
+Query Expansion : Deterministic MeSH templates backed by Pratik-027/curalink-medical-llm
+                  (flan-t5-base + LoRA, 0.71% trainable params, fine-tuned on MedQA)
+Synthesis       : Groq Llama-3.3-70B-Versatile — RAG-grounded deep insight from retrieved
+                  paper abstracts. Graceful fallback to local multi-stage pipeline.
 """
 import json
 import re

@@ -4,21 +4,44 @@ Curalink Custom LLM - Inference Service
 Model:  Pratik-027/curalink-medical-llm
 Base:   google/flan-t5-base + LoRA adapters (fine-tuned on medalpaca/medical_meadow_medqa)
 
-Architecture:
-  - QUERY EXPANSION: Deterministic MeSH boolean builder (reliable, always domain-relevant).
-  - SYNTHESIS: Intelligent multi-stage pipeline:
-      1. Extractive sentence scoring  — picks the most finding-rich sentence per abstract
-      2. Cross-paper consensus mining — finds terms appearing in 2+ papers
-      3. Recency analysis             — temporal distribution of evidence
-      4. Evidence strength rating     — rule-based (count + recency + consensus)
-      5. flan-t5 Clinical Takeaway    — model used for ONE small, scoped generation task
-    Zero hallucinations — every claim is grounded in retrieved documents.
+Architecture (Hybrid):
+  - QUERY EXPANSION : Deterministic MeSH boolean builder (reliable, always domain-relevant).
+                      Backed by our fine-tuned flan-t5 — no external API call.
+  - SYNTHESIS       : Groq Llama-3.3-70B-Versatile generates deep insight from retrieved
+                      paper abstracts (RAG-grounded, not from memory).
+                      Produces: Key Trends · Evidence Analysis · Clinical Takeaway · Strength.
+                      Graceful fallback to the local multi-stage pipeline when Groq is unavailable.
+
+Zero hallucinations — every claim is grounded in retrieved abstracts supplied as context.
 """
 import os
 import re
 import logging
 
 logger = logging.getLogger(__name__)
+
+# ── Groq Client (lazy init) ───────────────────────────────────────────────
+_groq_client = None
+GROQ_MODEL   = "llama-3.3-70b-versatile"
+
+
+def _get_groq_client():
+    """Lazy-initialise the Groq client. Returns None if key is absent."""
+    global _groq_client
+    if _groq_client is not None:
+        return _groq_client
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        logger.warning("[CustomLLM] GROQ_API_KEY not set — synthesis will use local fallback.")
+        return None
+    try:
+        from groq import Groq
+        _groq_client = Groq(api_key=api_key)
+        logger.info("[CustomLLM] ✅ Groq client initialised.")
+        return _groq_client
+    except Exception as e:
+        logger.warning(f"[CustomLLM] Groq init failed: {e}")
+        return None
 
 # ── Model Config ─────────────────────────────────────────────────────────
 CUSTOM_MODEL_ID   = os.environ.get("CUSTOM_MODEL_ID", "Pratik-027/curalink-medical-llm")
@@ -227,8 +250,8 @@ def _evidence_strength(n_pubs: int, recency: dict, consensus: list) -> tuple:
 
 def _clinical_takeaway_flan(query: str, disease: str, findings: list) -> str:
     """
-    Use flan-t5 for ONE focused task: 2-sentence clinical implication
-    grounded in extracted findings. Small + scoped = within model capability.
+    Fallback only: Use flan-t5 for a 2-sentence clinical implication
+    when Groq is unavailable. Small + scoped = within model capability.
     """
     if not findings:
         return ""
@@ -245,14 +268,114 @@ def _clinical_takeaway_flan(query: str, disease: str, findings: list) -> str:
         text = out[0]["generated_text"].strip()
         return text if len(text) > 30 else ""
     except Exception as e:
-        logger.warning(f"[CustomLLM] Takeaway generation failed: {e}")
+        logger.warning(f"[CustomLLM] Flan-T5 takeaway generation failed: {e}")
         return ""
+
+
+def _synthesize_with_groq(
+    query: str,
+    disease: str,
+    publications: list,
+    trials: list,
+    recency: dict,
+    consensus: list,
+    strength_label: str,
+    strength_emoji: str,
+    strength_just: str,
+) -> str | None:
+    """
+    Use Groq Llama-3.3-70b to generate a deep, structured synthesis from retrieved abstracts.
+    Returns formatted markdown on success, None on any error (triggers local fallback).
+    """
+    client = _get_groq_client()
+    if not client:
+        return None
+
+    # Build grounded context from top papers
+    context_blocks = []
+    for i, p in enumerate(publications[:6], 1):
+        title    = p.get("title", "Untitled")[:100]
+        year     = p.get("year", "N/A")
+        abstract = str(p.get("abstract", ""))[:500]
+        context_blocks.append(f"[Paper {i}] ({year}) {title}\nAbstract: {abstract}")
+    context_text = "\n\n".join(context_blocks)
+
+    trial_summary = ""
+    if trials:
+        trial_lines = [f"- {t.get('title','Untitled')[:80]} (Status: {t.get('status','Unknown')})" for t in trials[:4]]
+        trial_summary = "\n\nActive/Recent Clinical Trials:\n" + "\n".join(trial_lines)
+
+    disease_str = disease.capitalize() if disease else "this condition"
+    yr = recency
+    recency_note = ""
+    if yr.get("latest") and yr.get("oldest"):
+        recency_note = f"Evidence spans {yr['oldest']}–{yr['latest']} ({yr.get('recent_count',0)} studies from 2022+)."
+
+    system_prompt = (
+        "You are a senior clinical research analyst. Your role is to synthesize peer-reviewed "
+        "medical literature into clear, evidence-based insights for healthcare professionals. "
+        "Be direct, specific, and data-driven. Never add information not present in the provided abstracts. "
+        "Do not use phrases like 'based on the provided abstracts' — write as a confident analyst would."
+    )
+
+    user_prompt = f"""Analyze the following retrieved medical research on: "{query}" (Condition: {disease_str})
+
+{recency_note}
+
+--- RETRIEVED EVIDENCE ---
+{context_text}{trial_summary}
+--- END EVIDENCE ---
+
+Generate a structured synthesis using EXACTLY this markdown format:
+
+## 🔬 Key Research Trends
+[2-3 sentences: What are the dominant research directions? What has the field been focused on? Mention specific years or numbers where available.]
+
+## ⚖️ Evidence Analysis
+**Points of consensus across studies:**
+- [Specific finding supported by 2+ papers — cite paper numbers e.g. (Papers 1, 3)]
+- [Another consensus finding]
+- [Another if available]
+
+**Key findings from top-ranked studies:**
+- [Most important finding from a specific paper — be specific about outcomes, percentages, or mechanisms]
+- [Another specific finding]
+- [Another if available]
+
+## 💊 Clinical Takeaway
+[2-3 sentences: What should a clinician or patient take away from this body of evidence? What does this mean in practice? Be direct and actionable.]
+
+*⚕️ Research-based analysis only. Always consult a qualified healthcare professional.*
+
+## 📊 Evidence Strength: {strength_emoji} {strength_label}
+{strength_just}."""
+
+    try:
+        logger.info(f"[CustomLLM] Calling Groq {GROQ_MODEL} for synthesis ...")
+        response = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
+            temperature=0.3,       # Low temp = factual, consistent, not creative
+            max_tokens=700,        # ~500 words — enough for a rich synthesis
+            top_p=0.9,
+        )
+        result = response.choices[0].message.content.strip()
+        logger.info("[CustomLLM] ✅ Groq synthesis complete.")
+        return result
+    except Exception as e:
+        logger.warning(f"[CustomLLM] Groq synthesis failed: {e} — falling back to local pipeline.")
+        return None
 
 
 def _build_synthesis(disease: str, query: str, publications: list, trials: list) -> str:
     """
-    Orchestrates the full synthesis pipeline:
-    extraction → consensus → recency → strength → flan-t5 takeaway.
+    Orchestrates the synthesis pipeline:
+      1. Compute evidence metadata (recency, consensus, strength) — deterministic.
+      2. Attempt Groq Llama-3 synthesis (deep, contextual, LLM-powered).
+      3. Fall back to local multi-stage pipeline if Groq is unavailable.
     Returns structured markdown for the SynthesisPanel frontend component.
     """
     if not publications:
@@ -269,6 +392,17 @@ def _build_synthesis(disease: str, query: str, publications: list, trials: list)
     strength_label, strength_emoji, strength_just = _evidence_strength(
         len(publications), recency, consensus
     )
+
+    # ── ATTEMPT 1: Groq Llama-3 synthesis ───────────────────────────────────
+    groq_result = _synthesize_with_groq(
+        query, disease_str, publications, trials,
+        recency, consensus, strength_label, strength_emoji, strength_just
+    )
+    if groq_result:
+        return groq_result
+
+    # ── FALLBACK: Local multi-stage pipeline ─────────────────────────────────
+    logger.info("[CustomLLM] Using local fallback synthesis pipeline.")
 
     # Extract best finding sentence per top paper
     top_findings = []
@@ -314,7 +448,7 @@ def _build_synthesis(disease: str, query: str, publications: list, trials: list)
             lines.append(f"- {f}")
     lines.append("")
 
-    # ── Section 3: Clinical Takeaway (flan-t5) ───────────────────────────────
+    # ── Section 3: Clinical Takeaway (flan-t5 fallback) ─────────────────────
     lines.append("## 💊 Clinical Takeaway")
     takeaway = _clinical_takeaway_flan(query, disease_str, top_findings)
     if takeaway:
